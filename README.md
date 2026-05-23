@@ -68,6 +68,8 @@ npm run dev -- --port 8080 --host 127.0.0.1
 The React frontend dashboard is now online at **[http://127.0.0.1:8080](http://127.0.0.1:8080)**.
 
 ---
+## UI
+<img width="1860" height="878" alt="image" src="https://github.com/user-attachments/assets/9c7b8161-f7b5-4959-b41f-d3627adc9e3c" />
 
 ## Simulator Walkthrough Steps
 

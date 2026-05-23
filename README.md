@@ -6,6 +6,10 @@ Aegis Arena is an advanced, real-time command-and-control platform designed to m
 
 ## Technical Architecture
 
+<img width="900" height="423" alt="image" src="https://github.com/user-attachments/assets/e0b3d410-700a-4c90-aced-ef716c0f1816" />
+
+
+
 The platform is divided into two decoupled layers:
 
 ```text
@@ -71,3 +75,8 @@ The React frontend dashboard is now online at **[http://127.0.0.1:8080](http://1
 2. **Interactive blueprints**: Click Stand sectors or Gate turnstiles on the map. Verify React opens live telemetry overlays fetched via WebSocket.
 3. **Trigger Exit Surge**: Click **Post-Match Exit Surge** under Incident Simulator. Watch the python **GateAgent** invoke its surge predictions, publish `GATE_CONGESTION` to the event bus, which the **RoutingAgent** intercepts, pushing a mock smartphone warning toast onto the screen!
 4. **Trigger Security Incident**: Blocks Gate 5, flashes the crimson emergency overlay, and automatically dispatches responder squads sliding smoothly towards coordinates with live ETA tick updates.
+
+## Scalability
+<img width="900" height="588" alt="image" src="https://github.com/user-attachments/assets/b1468b01-4db6-4c9d-a6f5-814c8a09ca53" />
+
+

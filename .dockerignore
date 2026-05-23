@@ -1,0 +1,14 @@
+# Exclude development dependencies and caches from Docker context
+.git
+.gitignore
+.gemini
+frontend/node_modules
+frontend/dist
+backend/__pycache__
+backend/.pytest_cache
+*.log
+Dockerfile
+README.md
+task.md
+walkthrough.md
+implementation_plan.md

@@ -665,3 +665,14 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.class_disconnect(websocket)
+
+# ==========================================
+# 8. UNIFIED STATIC ASSETS MOUNTING
+# ==========================================
+import os
+from fastapi.staticfiles import StaticFiles
+
+if os.path.exists("static"):
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+elif os.path.exists("../frontend/dist"):
+    app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="static")

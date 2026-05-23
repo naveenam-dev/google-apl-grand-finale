@@ -90,7 +90,12 @@ export default function App() {
 
   // Initialize WebSockets
   useEffect(() => {
-    const ws = new WebSocket("ws://127.0.0.1:8000/ws");
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsHost = window.location.host;
+    const wsUrl = wsHost.includes("localhost") || wsHost.includes("127.0.0.1")
+      ? `ws://${window.location.hostname}:8000/ws`
+      : `${wsProtocol}//${wsHost}/ws`;
+    const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
       setWsConnected(true);
@@ -156,9 +161,17 @@ export default function App() {
   }, []);
 
   // REST controller integrations
+  const getApiUrl = (path) => {
+    const host = window.location.host;
+    if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      return `http://${window.location.hostname}:8000${path}`;
+    }
+    return path;
+  };
+
   const triggerIncident = async (type) => {
     try {
-      await fetch("http://127.0.0.1:8000/api/incident", {
+      await fetch(getApiUrl("/api/incident"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type })
@@ -170,7 +183,7 @@ export default function App() {
 
   const dispatchUnit = async (squadId) => {
     try {
-      await fetch("http://127.0.0.1:8000/api/dispatch", {
+      await fetch(getApiUrl("/api/dispatch"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ squad_id: squadId })
@@ -183,7 +196,7 @@ export default function App() {
   const handleAutopilotToggle = async (e) => {
     const checked = e.target.checked;
     try {
-      await fetch("http://127.0.0.1:8000/api/autopilot", {
+      await fetch(getApiUrl("/api/autopilot"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ autopilot: checked })
@@ -195,7 +208,7 @@ export default function App() {
 
   const resetMesh = async () => {
     try {
-      await fetch("http://127.0.0.1:8000/api/reset", { method: "POST" });
+      await fetch(getApiUrl("/api/reset"), { method: "POST" });
       setSignage({ text: "PROCEED TO ALL EXIT GATES", style: "normal" });
       setOverlayCard({ visible: false, title: "", type: "", data: null });
       setAgents({

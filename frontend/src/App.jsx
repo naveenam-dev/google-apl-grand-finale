@@ -49,14 +49,31 @@ export default function App() {
       med: { id: "med", name: "First Responder 1", badge: "MED", x: 220, y: 210, homeX: 220, homeY: 210, targetX: 220, targetY: 210, status: "Standby • Medical Bay", active: false, timer: 0, targetName: "Medical Bay" },
       vol: { id: "vol", name: "Volunteer Echo", badge: "VOL", x: 280, y: 210, homeX: 280, homeY: 210, targetX: 280, targetY: 210, status: "Standby • Gate 2 Hub", active: false, timer: 0, targetName: "Gate 2 Hub" }
     },
-    logs: []
+    logs: [],
+    geminiPrediction: {
+      safety_score: 95,
+      risk_level: "LOW",
+      bottlenecks: [],
+      predictions: ["Arena circulation nominal. Turnstiles scan flow in standard ranges."],
+      action_recommendations: [],
+      advisories: [],
+      mode: "emulated",
+      timestamp: ""
+    },
+    hasGeminiKey: false
   });
+
+  const [activeConsoleTab, setActiveConsoleTab] = useState('agents'); // 'agents' or 'gemini'
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showKeyInput, setShowKeyInput] = useState(false);
 
   // Agent HUD state
   const [agents, setAgents] = useState({
     'gate-agent': { status: "STANDBY", desc: "Idle. Monitoring turnstiles, ticket velocities and crowd entrances.", activeTool: null },
     'routing-agent': { status: "STANDBY", desc: "Idle. Tracking internal concourse densities & exit bottlenecks.", activeTool: null },
-    'safety-agent': { status: "STANDBY", desc: "Idle. Processing anomalous sensors, transit alerts and emergency events.", activeTool: null }
+    'safety-agent': { status: "STANDBY", desc: "Idle. Processing anomalous sensors, transit alerts and emergency events.", activeTool: null },
+    'gemini-agent': { status: "STANDBY", desc: "Idle. Modeling stadium layout circulation and crowd crush vectors.", activeTool: null }
   });
 
   // Event bus logs local stream
@@ -214,10 +231,78 @@ export default function App() {
       setAgents({
         'gate-agent': { status: "STANDBY", desc: "Idle. Monitoring turnstiles, ticket velocities and crowd entrances.", activeTool: null },
         'routing-agent': { status: "STANDBY", desc: "Idle. Tracking internal concourse densities & exit bottlenecks.", activeTool: null },
-        'safety-agent': { status: "STANDBY", desc: "Idle. Processing anomalous sensors, transit alerts and emergency events.", activeTool: null }
+        'safety-agent': { status: "STANDBY", desc: "Idle. Processing anomalous sensors, transit alerts and emergency events.", activeTool: null },
+        'gemini-agent': { status: "STANDBY", desc: "Idle. Modeling stadium layout circulation and crowd crush vectors.", activeTool: null }
       });
     } catch (e) {
       console.error("REST Error resetting mesh:", e);
+    }
+  };
+
+  const manualGeminiAnalyze = async () => {
+    setIsAnalyzing(true);
+    try {
+      await fetch(getApiUrl("/api/gemini/analyze"), {
+        method: "POST"
+      });
+    } catch (e) {
+      console.error("REST Error running Gemini analysis:", e);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const submitGeminiKey = async () => {
+    if (!apiKeyInput.trim()) return;
+    try {
+      const res = await fetch(getApiUrl("/api/gemini/config"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKeyInput })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        setApiKeyInput('');
+        setShowKeyInput(false);
+      } else {
+        alert(data.message || "Failed to submit key");
+      }
+    } catch (e) {
+      console.error("REST Error configuring Gemini key:", e);
+    }
+  };
+
+  const executeAiDirective = async (rec) => {
+    try {
+      if (rec.agent === "routing-agent") {
+        if (rec.tool === "update_digital_signage") {
+          await fetch(getApiUrl("/api/incident"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: telemetry.activeIncident || "normal" })
+          });
+          setSignage({ text: rec.args, style: telemetry.activeIncident === 'threat' ? 'emergency' : 'warning' });
+        } else if (rec.tool === "push_app_notification") {
+          const now = new Date();
+          const strTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          setPhoneToast({
+            active: true,
+            sector: rec.args.includes("B") ? "B" : "ALL",
+            message: `AI Directed Routing: ${rec.args}`,
+            time: strTime
+          });
+          setTimeout(() => {
+            setPhoneToast(prev => ({ ...prev, active: false }));
+          }, 4500);
+        }
+      } else if (rec.agent === "safety-agent") {
+        if (rec.tool === "dispatch_nearest_volunteers") {
+          const squad = rec.args.includes("Alpha") || rec.args.includes("sec") ? "sec" : (rec.args.includes("Responder") || rec.args.includes("med") ? "med" : "vol");
+          await dispatchUnit(squad);
+        }
+      }
+    } catch (e) {
+      console.error("REST Error executing AI directive:", e);
     }
   };
 
@@ -474,6 +559,21 @@ export default function App() {
                 <ellipse cx="250" cy="210" rx="30" ry="25" className="pitch-lines" />
                 <line x1="250" y1="195" x2="250" y2="225" className="pitch-lines" />
 
+                {/* Gemini Neural Hub Network Node */}
+                <g className="gemini-neural-hub">
+                  <circle cx="250" cy="210" r="14" className={`gemini-hub-outer ${agents['gemini-agent'].status === 'THINKING' ? 'active-thinking' : ''}`} />
+                  <circle cx="250" cy="210" r="8" className="gemini-hub-inner" />
+                  {/* Glowing pulses traveling out to stand sectors when thinking */}
+                  {agents['gemini-agent'].status === 'THINKING' && (
+                    <>
+                      <line x1="250" y1="210" x2="250" y2="130" className="gemini-pulse-line" />
+                      <line x1="250" y1="210" x2="350" y2="210" className="gemini-pulse-line" />
+                      <line x1="250" y1="210" x2="250" y2="290" className="gemini-pulse-line" />
+                      <line x1="250" y1="210" x2="150" y2="210" className="gemini-pulse-line" />
+                    </>
+                  )}
+                </g>
+
                 {/* Sectors/Stands */}
                 <path d="M 120 120 A 180 150 0 0 1 380 120 L 340 145 A 130 110 0 0 0 160 145 Z" 
                       className={`stadium-sector sector-level-${
@@ -601,8 +701,15 @@ export default function App() {
 
           {/* Right Column: React Agent Mesh control dashboard */}
           <div className="panel">
-            <div className="panel-header" style={{ background: 'rgba(157, 78, 221, 0.05)', borderBottom: '1px solid rgba(157, 78, 221, 0.15)' }}>
-              <h2 className="panel-title" style={{ color: '#e0aaff' }}><Cpu size={14} style={{ color: 'var(--color-purple)' }} /> Agent Mesh Control Console</h2>
+            <div className="panel-header" style={{ background: 'rgba(157, 78, 221, 0.05)', borderBottom: '1px solid rgba(157, 78, 221, 0.15)', padding: '0.4rem 1.0rem' }}>
+              <div className="console-tabs">
+                <button className={`console-tab-btn ${activeConsoleTab === 'agents' ? 'active' : ''}`} onClick={() => setActiveConsoleTab('agents')}>
+                  <Cpu size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} /> Mesh Console
+                </button>
+                <button className={`console-tab-btn gemini-tab ${activeConsoleTab === 'gemini' ? 'active' : ''}`} onClick={() => setActiveConsoleTab('gemini')}>
+                  ✦ Gemini Hub
+                </button>
+              </div>
               <label className="autopilot-switch">
                 <span>AUTOPILOT</span>
                 <div className="switch">
@@ -612,50 +719,175 @@ export default function App() {
               </label>
             </div>
 
-            <div className="panel-body" style={{ gap: '0.6rem', paddingBottom: '0.4rem' }}>
-              <div className="agent-mesh-console">
-                
-                {/* Gate Agent Card */}
-                <div className="agent-node-card gate-agent">
-                  <div className="agent-node-header">
-                    <span className="agent-name-tag"><DoorOpen size={12} /> Gate & Ticketing Agent</span>
-                    <span className={`agent-status-badge ${agents['gate-agent'].status.toLowerCase()}`}>{agents['gate-agent'].status}</span>
+            <div className="panel-body" style={{ gap: '0.6rem', paddingBottom: '0.4rem', overflowY: 'auto' }}>
+              {activeConsoleTab === 'agents' ? (
+                <div className="agent-mesh-console">
+                  
+                  {/* Gate Agent Card */}
+                  <div className="agent-node-card gate-agent">
+                    <div className="agent-node-header">
+                      <span className="agent-name-tag"><DoorOpen size={12} /> Gate & Ticketing Agent</span>
+                      <span className={`agent-status-badge ${agents['gate-agent'].status.toLowerCase()}`}>{agents['gate-agent'].status}</span>
+                    </div>
+                    <div className="agent-action-desc">{agents['gate-agent'].desc}</div>
+                    <div className="agent-tools-container">
+                      <span className={`tool-badge ${agents['gate-agent'].activeTool === 'get_current_inflow_rate' ? 'active-call' : ''}`} id="tool-get_current_inflow_rate">get_current_inflow_rate()</span>
+                      <span className={`tool-badge ${agents['gate-agent'].activeTool === 'predict_surge_window' ? 'active-call' : ''}`} id="tool-predict_surge_window">predict_surge_window()</span>
+                    </div>
                   </div>
-                  <div className="agent-action-desc">{agents['gate-agent'].desc}</div>
-                  <div className="agent-tools-container">
-                    <span className={`tool-badge ${agents['gate-agent'].activeTool === 'get_current_inflow_rate' ? 'active-call' : ''}`} id="tool-get_current_inflow_rate">get_current_inflow_rate()</span>
-                    <span className={`tool-badge ${agents['gate-agent'].activeTool === 'predict_surge_window' ? 'active-call' : ''}`} id="tool-predict_surge_window">predict_surge_window()</span>
+
+                  {/* Routing Agent Card */}
+                  <div className="agent-node-card routing-agent">
+                    <div className="agent-node-header">
+                      <span className="agent-name-tag"><Route size={12} /> Dynamic Routing Agent</span>
+                      <span className={`agent-status-badge ${agents['routing-agent'].status.toLowerCase()}`}>{agents['routing-agent'].status}</span>
+                    </div>
+                    <div className="agent-action-desc">{agents['routing-agent'].desc}</div>
+                    <div className="agent-tools-container">
+                      <span className={`tool-badge ${agents['routing-agent'].activeTool === 'calculate_bottleneck_index' ? 'active-call' : ''}`} id="tool-calculate_bottleneck_index">calculate_bottleneck_index()</span>
+                      <span className={`tool-badge ${agents['routing-agent'].activeTool === 'update_digital_signage' ? 'active-call' : ''}`} id="tool-update_digital_signage">update_digital_signage()</span>
+                      <span className={`tool-badge ${agents['routing-agent'].activeTool === 'push_app_notification' ? 'active-call' : ''}`} id="tool-push_app_notification">push_app_notification()</span>
+                    </div>
+                  </div>
+
+                  {/* Safety Agent Card */}
+                  <div className="agent-node-card safety-agent">
+                    <div className="agent-node-header">
+                      <span className="agent-name-tag"><ShieldAlert size={12} /> Incident & Safety Agent</span>
+                      <span className={`agent-status-badge ${agents['safety-agent'].status.toLowerCase()}`}>{agents['safety-agent'].status}</span>
+                    </div>
+                    <div className="agent-action-desc">{agents['safety-agent'].desc}</div>
+                    <div className="agent-tools-container">
+                      <span className={`tool-badge ${agents['safety-agent'].activeTool === 'trigger_emergency_protocol' ? 'active-call' : ''}`} id="tool-trigger_emergency_protocol">trigger_emergency_protocol()</span>
+                      <span className={`tool-badge ${agents['safety-agent'].activeTool === 'dispatch_nearest_volunteers' ? 'active-call' : ''}`} id="tool-dispatch_nearest_volunteers">dispatch_nearest_volunteers()</span>
+                    </div>
+                  </div>
+
+                  {/* Gemini Agent Card (Mesh view) */}
+                  <div className="agent-node-card gemini-agent">
+                    <div className="agent-node-header">
+                      <span className="agent-name-tag">✦ Gemini Cognitive Agent</span>
+                      <span className={`agent-status-badge ${agents['gemini-agent'].status.toLowerCase()}`}>{agents['gemini-agent'].status}</span>
+                    </div>
+                    <div className="agent-action-desc">{agents['gemini-agent'].desc}</div>
+                    <div className="agent-tools-container">
+                      <span className={`tool-badge ${agents['gemini-agent'].activeTool === 'generative_prediction' ? 'active-call' : ''}`} id="tool-generative_prediction">generative_prediction()</span>
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                <div className="gemini-cognitive-hub">
+                  
+                  {/* AI Safety Dial & Configuration Mode */}
+                  <div className="gemini-hud-main">
+                    <div className="safety-dial-card">
+                      <div className="safety-dial-wrapper">
+                        {/* Circular Progress SVG */}
+                        <svg className="safety-dial-svg" viewBox="0 0 100 100">
+                          <circle cx="50" cy="50" r="40" className="safety-dial-bg" />
+                          <circle cx="50" cy="50" r="40" className={`safety-dial-fill level-${telemetry.geminiPrediction?.risk_level?.toLowerCase()}`} 
+                                  style={{ strokeDashoffset: 251.2 - (251.2 * (telemetry.geminiPrediction?.safety_score || 95)) / 100 }} />
+                        </svg>
+                        <div className="safety-dial-content">
+                          <span className="dial-value">{telemetry.geminiPrediction?.safety_score || 95}</span>
+                          <span className="dial-unit">SAFETY SCORE</span>
+                        </div>
+                      </div>
+                      <div className="safety-dial-meta">
+                        <span className="dial-risk-label">RISK PROFILE</span>
+                        <span className={`dial-risk-value risk-${telemetry.geminiPrediction?.risk_level?.toLowerCase()}`}>{telemetry.geminiPrediction?.risk_level || "LOW"}</span>
+                      </div>
+                    </div>
+
+                    <div className="gemini-api-status-box">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="stat-label">AI Engine Mode</span>
+                        <span className={`engine-mode-badge ${telemetry.hasGeminiKey ? 'live' : 'emulated'}`}>
+                          {telemetry.hasGeminiKey ? "✦ Gemini Live" : "⚙️ Emulated"}
+                        </span>
+                      </div>
+                      
+                      {!showKeyInput ? (
+                        <button className="btn-key-toggle" onClick={() => setShowKeyInput(true)}>
+                          {telemetry.hasGeminiKey ? "Change API Key" : "Activate Live Gemini"}
+                        </button>
+                      ) : (
+                        <div className="key-input-panel">
+                          <input type="password" placeholder="Enter Gemini API Key..." value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} className="key-input-field" />
+                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.2rem' }}>
+                            <button className="btn-key-action submit" onClick={submitGeminiKey}>Apply</button>
+                            <button className="btn-key-action cancel" onClick={() => setShowKeyInput(false)}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Predictions List */}
+                  <div className="prediction-sec">
+                    <h3 className="section-title-hud">✦ COGNITIVE RISK PREDICTIONS</h3>
+                    <div className="predictions-list">
+                      {telemetry.geminiPrediction?.predictions?.length > 0 ? (
+                        telemetry.geminiPrediction.predictions.map((pred, i) => (
+                          <div key={i} className="prediction-entry">
+                            <span className="prediction-bullet">✦</span>
+                            <p className="prediction-text">{pred}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="prediction-entry empty">
+                          <p>No safety alerts predicted. System posture nominal.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* AI Recommended Directives */}
+                  <div className="prediction-sec">
+                    <h3 className="section-title-hud">✦ RECOMMENDED AI DIRECTIVES</h3>
+                    <div className="directives-list">
+                      {telemetry.geminiPrediction?.action_recommendations?.length > 0 ? (
+                        telemetry.geminiPrediction.action_recommendations.map((rec, i) => (
+                          <div key={i} className="directive-card">
+                            <div className="directive-header">
+                              <span className="directive-agent">{rec.agent.toUpperCase()}</span>
+                              <span className="directive-tool">.{rec.tool}()</span>
+                            </div>
+                            <div className="directive-args">Payload: <code>"{rec.args}"</code></div>
+                            <p className="directive-rationale">{rec.rationale}</p>
+                            
+                            {telemetry.autopilot ? (
+                              <div className="autopilot-badge-applied">✓ Autopilot Handled</div>
+                            ) : (
+                              <button className="btn-run-directive" onClick={() => executeAiDirective(rec)}>
+                                RUN RECOMMENDED DIRECTIVE
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="directive-card empty">
+                          <p>Stadium posture within nominal ranges. No emergency routing override suggested.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trigger Manual Analyze */}
+                  <button className="btn-gemini-analyze" disabled={isAnalyzing} onClick={manualGeminiAnalyze}>
+                    {isAnalyzing ? (
+                      <span className="analyzing-spinner">✦ THINKING...</span>
+                    ) : (
+                      <>✦ RE-EVALUATE COGNITIVE PREDICTIONS</>
+                    )}
+                  </button>
+
+                  <div className="gemini-timestamp">
+                    Latest Cognitive Analysis: {telemetry.geminiPrediction?.timestamp || "Pending..."}
                   </div>
                 </div>
-
-                {/* Routing Agent Card */}
-                <div className="agent-node-card routing-agent">
-                  <div className="agent-node-header">
-                    <span className="agent-name-tag"><Route size={12} /> Dynamic Routing Agent</span>
-                    <span className={`agent-status-badge ${agents['routing-agent'].status.toLowerCase()}`}>{agents['routing-agent'].status}</span>
-                  </div>
-                  <div className="agent-action-desc">{agents['routing-agent'].desc}</div>
-                  <div className="agent-tools-container">
-                    <span className={`tool-badge ${agents['routing-agent'].activeTool === 'calculate_bottleneck_index' ? 'active-call' : ''}`} id="tool-calculate_bottleneck_index">calculate_bottleneck_index()</span>
-                    <span className={`tool-badge ${agents['routing-agent'].activeTool === 'update_digital_signage' ? 'active-call' : ''}`} id="tool-update_digital_signage">update_digital_signage()</span>
-                    <span className={`tool-badge ${agents['routing-agent'].activeTool === 'push_app_notification' ? 'active-call' : ''}`} id="tool-push_app_notification">push_app_notification()</span>
-                  </div>
-                </div>
-
-                {/* Safety Agent Card */}
-                <div className="agent-node-card safety-agent">
-                  <div className="agent-node-header">
-                    <span className="agent-name-tag"><ShieldAlert size={12} /> Incident & Safety Agent</span>
-                    <span className={`agent-status-badge ${agents['safety-agent'].status.toLowerCase()}`}>{agents['safety-agent'].status}</span>
-                  </div>
-                  <div className="agent-action-desc">{agents['safety-agent'].desc}</div>
-                  <div className="agent-tools-container">
-                    <span className={`tool-badge ${agents['safety-agent'].activeTool === 'trigger_emergency_protocol' ? 'active-call' : ''}`} id="tool-trigger_emergency_protocol">trigger_emergency_protocol()</span>
-                    <span className={`tool-badge ${agents['safety-agent'].activeTool === 'dispatch_nearest_volunteers' ? 'active-call' : ''}`} id="tool-dispatch_nearest_volunteers">dispatch_nearest_volunteers()</span>
-                  </div>
-                </div>
-
-              </div>
+              )}
             </div>
 
             {/* Shared Event Bus HUD Log */}

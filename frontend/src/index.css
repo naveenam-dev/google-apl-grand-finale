@@ -1110,6 +1110,495 @@ input:checked + .slider:before {
     50% { opacity: 0.75; }
 }
 
+/* =========================================
+   GEMINI COGNITIVE HUB CYBERPUNK STYLING
+   ========================================= */
+
+.console-tabs {
+    display: flex;
+    gap: 0.25rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 0.15rem;
+}
+
+.console-tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 0.35rem 0.65rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    outline: none;
+}
+
+.console-tab-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.console-tab-btn.active {
+    color: #fff;
+    background: rgba(157, 78, 221, 0.15);
+    border: 1px solid rgba(157, 78, 221, 0.3);
+    box-shadow: 0 0 10px rgba(157, 78, 221, 0.1);
+}
+
+.console-tab-btn.gemini-tab.active {
+    background: rgba(0, 240, 255, 0.1);
+    border-color: rgba(0, 240, 255, 0.3);
+    box-shadow: 0 0 10px var(--color-cyan-glow);
+    animation: gemini-tab-glow-pulse 2s infinite alternate;
+}
+
+@keyframes gemini-tab-glow-pulse {
+    0% { box-shadow: 0 0 8px rgba(0, 240, 255, 0.15); }
+    100% { box-shadow: 0 0 15px rgba(0, 240, 255, 0.35); }
+}
+
+/* Gemini Neural SVG Node */
+.gemini-hub-outer {
+    fill: rgba(0, 240, 255, 0.05);
+    stroke: var(--color-cyan);
+    stroke-width: 1.5px;
+    stroke-dasharray: 2, 4;
+    animation: flow-dash 4s linear infinite;
+    r: 14px;
+}
+
+.gemini-hub-outer.active-thinking {
+    stroke: var(--color-purple);
+    fill: rgba(157, 78, 221, 0.1);
+    stroke-width: 2px;
+    animation: flow-dash 1.5s linear infinite, thinking-scale-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.gemini-hub-inner {
+    fill: var(--color-cyan);
+    filter: drop-shadow(0 0 4px var(--color-cyan-glow));
+    r: 8px;
+}
+
+@keyframes thinking-scale-pulse {
+    from { r: 12px; }
+    to { r: 18px; }
+}
+
+.gemini-pulse-line {
+    fill: none;
+    stroke: var(--color-cyan);
+    stroke-width: 1.5px;
+    stroke-linecap: round;
+    stroke-dasharray: 6, 12;
+    animation: flow-dash 0.6s linear infinite;
+    filter: drop-shadow(0 0 4px var(--color-cyan-glow));
+    opacity: 0.85;
+}
+
+/* Gemini HUD Console Layout */
+.gemini-cognitive-hub {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    animation: fade-slide-in 0.35s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+
+.gemini-hud-main {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 0.5rem;
+}
+
+.safety-dial-card {
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.safety-dial-wrapper {
+    position: relative;
+    width: 62px;
+    height: 62px;
+    flex-shrink: 0;
+}
+
+.safety-dial-svg {
+    transform: rotate(-90deg);
+    width: 100%;
+    height: 100%;
+}
+
+.safety-dial-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.05);
+    stroke-width: 7;
+}
+
+.safety-dial-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-dasharray: 251.2;
+    transition: stroke-dashoffset 1s ease-out;
+}
+
+.safety-dial-fill.level-low { stroke: var(--color-green); filter: drop-shadow(0 0 3px var(--color-green-glow)); }
+.safety-dial-fill.level-elevated { stroke: var(--color-amber); filter: drop-shadow(0 0 3px var(--color-amber-glow)); }
+.safety-dial-fill.level-severe { stroke: #ff7700; filter: drop-shadow(0 0 3px rgba(255, 119, 0, 0.4)); }
+.safety-dial-fill.level-critical { stroke: var(--color-crimson); filter: drop-shadow(0 0 3px var(--color-crimson-glow)); }
+
+.safety-dial-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.dial-value {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.dial-unit {
+    font-size: 0.35rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-top: 1px;
+}
+
+.safety-dial-meta {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.dial-risk-label {
+    font-size: 0.55rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+}
+
+.dial-risk-value {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.dial-risk-value.risk-low { color: var(--color-green); }
+.dial-risk-value.risk-elevated { color: var(--color-amber); }
+.dial-risk-value.risk-severe { color: #ff7700; }
+.dial-risk-value.risk-critical { color: var(--color-crimson); }
+
+/* Gemini Config status box */
+.gemini-api-status-box {
+    background: rgba(0, 240, 255, 0.02);
+    border: 1px solid rgba(0, 240, 255, 0.08);
+    border-radius: 8px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.4rem;
+}
+
+.engine-mode-badge {
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    font-weight: 900;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.engine-mode-badge.live {
+    background: rgba(0, 240, 255, 0.15);
+    color: var(--color-cyan);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    box-shadow: 0 0 6px var(--color-cyan-glow);
+}
+
+.engine-mode-badge.emulated {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-key-toggle {
+    background: rgba(0, 240, 255, 0.05);
+    border: 1px dashed rgba(0, 240, 255, 0.25);
+    color: var(--color-cyan);
+    font-size: 0.58rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    padding: 0.25rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    outline: none;
+}
+
+.btn-key-toggle:hover {
+    background: rgba(0, 240, 255, 0.12);
+    border-color: var(--color-cyan);
+}
+
+.key-input-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.key-input-field {
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 0.58rem;
+    padding: 0.25rem;
+    border-radius: 4px;
+    width: 100%;
+    outline: none;
+}
+
+.key-input-field:focus {
+    border-color: var(--color-cyan);
+    box-shadow: 0 0 6px rgba(0, 240, 255, 0.1);
+}
+
+.btn-key-action {
+    flex: 1;
+    border: none;
+    font-size: 0.55rem;
+    padding: 0.2rem;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.btn-key-action.submit {
+    background: var(--color-cyan);
+    color: var(--bg-primary);
+    font-weight: 600;
+}
+
+.btn-key-action.cancel {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+}
+
+/* Predictions styling */
+.prediction-sec {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.section-title-hud {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+}
+
+.predictions-list {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    padding: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.prediction-entry {
+    display: flex;
+    gap: 0.4rem;
+    align-items: flex-start;
+    animation: fade-slide-in 0.3s ease-out forwards;
+}
+
+.prediction-entry.empty {
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.58rem;
+    padding: 0.3rem;
+}
+
+.prediction-bullet {
+    color: var(--color-cyan);
+    font-size: 0.65rem;
+    line-height: 1;
+    margin-top: 1px;
+}
+
+.prediction-text {
+    font-size: 0.62rem;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+/* Directives list */
+.directives-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 160px;
+    overflow-y: auto;
+    padding-right: 0.15rem;
+}
+
+.directive-card {
+    background: linear-gradient(135deg, rgba(13, 20, 35, 0.8) 0%, rgba(6, 9, 19, 0.9) 100%);
+    border: 1px solid rgba(0, 240, 255, 0.12);
+    border-radius: 6px;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    position: relative;
+    border-left: 2px solid var(--color-cyan);
+}
+
+.directive-card.empty {
+    border-left-color: var(--text-muted);
+    border-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-muted);
+    font-size: 0.58rem;
+    text-align: center;
+    padding: 0.6rem;
+}
+
+.directive-header {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    font-weight: 700;
+}
+
+.directive-agent {
+    color: var(--color-cyan);
+}
+
+.directive-tool {
+    color: var(--text-secondary);
+}
+
+.directive-args {
+    font-size: 0.55rem;
+    color: #ffd8a8;
+}
+
+.directive-args code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.05rem 0.2rem;
+    border-radius: 3px;
+}
+
+.directive-rationale {
+    font-size: 0.58rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+}
+
+.btn-run-directive {
+    background: transparent;
+    border: 1px solid rgba(0, 240, 255, 0.5);
+    color: var(--color-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 0.2rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    outline: none;
+    margin-top: 0.1rem;
+    text-align: center;
+}
+
+.btn-run-directive:hover {
+    background: var(--color-cyan);
+    color: var(--bg-primary);
+    box-shadow: 0 0 8px var(--color-cyan-glow);
+}
+
+.autopilot-badge-applied {
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    color: var(--color-green);
+    background: rgba(0, 255, 102, 0.08);
+    border: 1px solid rgba(0, 255, 102, 0.15);
+    padding: 0.15rem;
+    border-radius: 3px;
+    text-align: center;
+    margin-top: 0.1rem;
+}
+
+/* Manual Trigger Analyze button */
+.btn-gemini-analyze {
+    background: linear-gradient(90deg, rgba(0, 240, 255, 0.8), rgba(157, 78, 221, 0.8));
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 900;
+    padding: 0.45rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.25s;
+    outline: none;
+    margin-top: 0.25rem;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(0, 240, 255, 0.1);
+}
+
+.btn-gemini-analyze:hover:not(:disabled) {
+    box-shadow: 0 4px 20px rgba(0, 240, 255, 0.25), 0 0 15px rgba(157, 78, 221, 0.15);
+    transform: translateY(-1px);
+}
+
+.btn-gemini-analyze:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.analyzing-spinner {
+    animation: pulse 1s infinite alternate;
+    display: inline-block;
+}
+
+.gemini-timestamp {
+    font-size: 0.52rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    text-align: center;
+    margin-top: 0.2rem;
+}
+
 /* Responsive grid fallback */
 @media (max-width: 1024px) {
     .dashboard-grid {

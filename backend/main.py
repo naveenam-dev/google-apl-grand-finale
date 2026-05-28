@@ -3,12 +3,18 @@
 
 import asyncio
 import json
+import os
 import random
 import time
 from typing import Dict, List, Optional
+import google.generativeai as genai
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Initialize environment config
+load_dotenv()
 
 app = FastAPI(title="Aegis Arena Stadium Agent Mesh Backend")
 
@@ -151,6 +157,26 @@ class TelemetryState:
         }
         
         self.logs = []
+        self.gemini_api_key = None
+        self.gemini_prediction = {
+            "safety_score": 95,
+            "risk_level": "LOW",
+            "bottlenecks": [],
+            "predictions": ["Arena circulation nominal. Turnstiles scan flow in standard ranges."],
+            "action_recommendations": [
+                {
+                  "agent": "routing-agent",
+                  "tool": "update_digital_signage",
+                  "args": "PROCEED TO ALL EXIT GATES",
+                  "rationale": "Facilitate steady ingress/egress nominal scans."
+                }
+            ],
+            "advisories": [
+                {"gate": i, "risk": "NOMINAL", "advice": "Continue nominal checkins."} for i in range(1, 9)
+            ],
+            "mode": "emulated",
+            "timestamp": time.strftime("%H:%M:%S")
+        }
 
     def add_log(self, msg: str, log_type: str = "info"):
         timestamp = time.strftime("%H:%M:%S")
@@ -160,6 +186,7 @@ class TelemetryState:
             self.logs.pop()
 
     def get_serialized_state(self):
+        key_active = bool(self.gemini_api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
         return {
             "activeIncident": self.active_incident,
             "autopilot": self.autopilot,
@@ -169,7 +196,9 @@ class TelemetryState:
             "sectors": self.sectors,
             "gates": self.gates,
             "responders": self.responders,
-            "logs": self.logs
+            "logs": self.logs,
+            "geminiPrediction": self.gemini_prediction,
+            "hasGeminiKey": key_active
         }
 
 state_store = TelemetryState()
@@ -450,10 +479,252 @@ class SafetyAgent:
 
         await self.update_visual_hud("STANDBY", "NOMINAL. Emergency responders routed to Stand A patient location.")
 
+# --- AGENT D: COGNITIVE PREDICTOR AGENT (Gemini Hub) ---
+class GeminiAgent:
+    def __init__(self):
+        self.class_id = "gemini-agent"
+        self.configured = False
+        self.setup_sdk()
+
+    def setup_sdk(self, dynamic_key: Optional[str] = None):
+        key = dynamic_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if key:
+            try:
+                genai.configure(api_key=key)
+                self.configured = True
+                state_store.gemini_api_key = key
+                return True
+            except Exception as e:
+                print(f"Error configuring Gemini SDK: {e}")
+        return False
+
+    async def update_visual_hud(self, status: str, desc: str, active_tool: Optional[str] = None):
+        msg = {
+            "type": "AGENT_UPDATE",
+            "agent": self.class_id,
+            "status": status,
+            "desc": desc,
+            "activeTool": active_tool
+        }
+        await manager.broadcast(msg)
+
+    async def analyze_stadium(self) -> dict:
+        key = state_store.gemini_api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        
+        # Prepare telemetry snapshot representation
+        attendance = state_store.attendance
+        flow_rate = state_store.flow_rate
+        peak_density = state_store.peak_density
+        incident = state_store.active_incident
+        
+        sectors_str = ", ".join([f"{k} ({v['name']}): Occupancy={v['occupancy']}/{v['capacity']} (State={v['state']})" for k, v in state_store.sectors.items()])
+        gates_str = ", ".join([f"Gate {k} ({v['name']}): State={v['state']}, Rate={v['rate']}/min" for k, v in state_store.gates.items()])
+        responders_str = ", ".join([f"{v['name']} ({v['badge']}): Coords=({int(v['x'])}, {int(v['y'])}), Target={v['targetName']}, Status={v['status']}, Active={v['active']}" for k, v in state_store.responders.items()])
+
+        # Build prompt
+        prompt = f"""
+You are the Aegis Arena AI Cognitive Safety Mesh Core.
+Analyze the following real-time stadium safety metrics:
+- Attendance: {attendance}
+- Flow Rate: {flow_rate}/min
+- Peak Concourse Density: {peak_density}%
+- Active Incident: {incident}
+- Stand Sectors: [{sectors_str}]
+- Gate turnstile scanners: [{gates_str}]
+- Responder Squads: [{responders_str}]
+
+Predict potential crowd crushes, bottleneck locations, and responder dispatch efficiencies.
+Recommend actionable directives utilizing the available tools for:
+1. `routing-agent` (tools: `update_digital_signage(location_id, instruction)`, `push_app_notification(sector, message)`)
+2. `safety-agent` (tools: `trigger_emergency_protocol(incident_type, sector_id)`, `dispatch_nearest_volunteers(squad_id, target_coords)`)
+
+You MUST return a JSON response in the following strict schema:
+{{
+  "safety_score": integer (0 to 100 representing safety rating),
+  "risk_level": "LOW" | "ELEVATED" | "SEVERE" | "CRITICAL",
+  "bottlenecks": [string list of active flow bottlenecks],
+  "predictions": [string list of short cognitive risk predictions / warnings],
+  "action_recommendations": [
+    {{
+      "agent": "routing-agent" | "safety-agent",
+      "tool": "update_digital_signage" | "push_app_notification" | "dispatch_nearest_volunteers",
+      "args": string summary of action payload (e.g. "STAND B: DEVIATE EXIT TO GATE 4"),
+      "rationale": string reason why this action mitigates the risk
+    }}
+  ],
+  "advisories": [
+    {{
+      "gate": integer (1 to 8),
+      "risk": "NOMINAL" | "BUSY" | "CONGESTED" | "CRITICAL",
+      "advice": string recommendation for this specific gate turns scanning rate
+    }}
+  ]
+}}
+Do NOT include markdown syntax around the JSON output, return raw valid JSON.
+"""
+        await self.update_visual_hud("THINKING", "Executing multi-agent cognitive simulation...", "generative_prediction")
+        state_store.add_log("[GeminiAgent] Initiated stadium safety cognitive audit.", "info")
+
+        if key:
+            try:
+                # Run live Gemini
+                loop = asyncio.get_event_loop()
+                def call_gemini():
+                    # Set the key explicitly on the thread
+                    genai.configure(api_key=key)
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                    response = model.generate_content(
+                        prompt,
+                        generation_config={"response_mime_type": "application/json"}
+                    )
+                    return response.text
+
+                raw_json = await loop.run_in_executor(None, call_gemini)
+                prediction = json.loads(raw_json)
+                prediction["mode"] = "live"
+                prediction["timestamp"] = time.strftime("%H:%M:%S")
+                
+                await self.update_visual_hud("STANDBY", "Real-time safety prediction completed successfully.")
+                state_store.add_log("[GeminiAgent] ✦ Live Gemini Cognitive Audit completed.", "success")
+                
+                return prediction
+            except Exception as e:
+                state_store.add_log(f"[GeminiAgent] Live Gemini API error: {str(e)}. Falling back to Heuristic Emulation.", "warn")
+                print(f"Gemini API error: {e}")
+                
+        # Heuristic Emulation fallback
+        await asyncio.sleep(1.0) # Simulate thinking latency
+        
+        # Calculate heuristic values based on the telemetry state
+        safety_score = 95
+        risk_level = "LOW"
+        bottlenecks = []
+        predictions = ["Arena circulation nominal. Turnstiles scan flow in standard ranges."]
+        action_recommendations = []
+        advisories = []
+        
+        for k, v in state_store.gates.items():
+            g_rate = v["rate"]
+            g_state = v["state"]
+            if g_state == "congested" or g_rate > 220:
+                advisories.append({"gate": k, "risk": "CONGESTED", "advice": f"Throttle turnstile load at Gate {k} by 20%."})
+            elif g_state == "blocked":
+                advisories.append({"gate": k, "risk": "CRITICAL", "advice": f"GATE IS LOCKED. Re-route all Stand exits away from Gate {k}."})
+            else:
+                advisories.append({"gate": k, "risk": "NOMINAL", "advice": "Continue nominal checkins."})
+
+        if incident == "surge":
+            safety_score = 72
+            risk_level = "ELEVATED"
+            bottlenecks = ["Sector B Exit Concourse", "Gate 3 turns scanner"]
+            predictions = [
+                "Gate 3 turnstile scans exceeded 265/m scans. Severe congestion expected on Sector B exit in 3 minutes.",
+                "Egress bottleneck in sector B can cause minor crowd push hazard."
+            ]
+            action_recommendations = [
+                {
+                  "agent": "routing-agent",
+                  "tool": "update_digital_signage",
+                  "args": "STAND B: DEVIATE EXIT TO GATE 4",
+                  "rationale": "Redistribute egress scanning rate and prevent crush hazard at Gate 3 turns."
+                },
+                {
+                  "agent": "routing-agent",
+                  "tool": "push_app_notification",
+                  "args": "Sector B warning: redirect through Gate 4 exits.",
+                  "rationale": "Directly notify smartphone users of queue times."
+                }
+            ]
+        elif incident == "weather":
+            safety_score = 64
+            risk_level = "SEVERE"
+            bottlenecks = ["Metro corridor shuttle terminal", "Gate 2 Hub ingress"]
+            predictions = [
+                "Slippery ground hazard detected. Wet concourse corridors increase fall risks by 40%.",
+                "Transit congestion under severe weather will delay stadium clearance by 20 minutes."
+            ]
+            action_recommendations = [
+                {
+                  "agent": "routing-agent",
+                  "tool": "update_digital_signage",
+                  "args": "WEATHER HAZARD: ESCAPE VIA METRO SHUTTLES",
+                  "rationale": "Direct spectators safely to high-capacity public transport sheltering routes."
+                },
+                {
+                  "agent": "safety-agent",
+                  "tool": "dispatch_nearest_volunteers",
+                  "args": "Volunteer Echo to Stand B Shelter",
+                  "rationale": "Assure volunteer personnel coordinates evacuation vectors."
+                }
+            ]
+        elif incident == "threat":
+            safety_score = 35
+            risk_level = "CRITICAL"
+            bottlenecks = ["Gate 5 cordon zone", "Stand C main exit concourse"]
+            predictions = [
+                "Incident containment boundary active at Gate 5. Stand C crowd egress is blocked.",
+                "Crush danger risk in Stand C exits if lockdown instructions are not clearly publicized."
+            ]
+            action_recommendations = [
+                {
+                  "agent": "routing-agent",
+                  "tool": "update_digital_signage",
+                  "args": "DANGER: LOCKDOWN REGION E / AVOID GATE 5",
+                  "rationale": "Strictly segregate crowd egress paths from active security cordon."
+                },
+                {
+                  "agent": "safety-agent",
+                  "tool": "dispatch_nearest_volunteers",
+                  "args": "Squad Alpha to Gate 5 (Incident Cordon)",
+                  "rationale": "Deploy tactical security units to establish containment barriers."
+                }
+            ]
+        elif incident == "medical":
+            safety_score = 80
+            risk_level = "ELEVATED"
+            bottlenecks = ["Stand A medical triage access lane"]
+            predictions = [
+                "Responder ETA of 5s locks in triage path. Triage path must remain unobstructed.",
+                "Slight bottleneck in Sector A turnstiles due to spectator curiosity slowing paths."
+            ]
+            action_recommendations = [
+                {
+                  "agent": "safety-agent",
+                  "tool": "dispatch_nearest_volunteers",
+                  "args": "First Responder 1 to Stand A",
+                  "rationale": "Expedite medical responder intervention for cardiac distress incident."
+                }
+            ]
+        else:
+            action_recommendations = [
+                {
+                  "agent": "routing-agent",
+                  "tool": "update_digital_signage",
+                  "args": "PROCEED TO ALL EXIT GATES",
+                  "rationale": "Facilitate steady ingress/egress nominal scans."
+                }
+            ]
+            
+        prediction = {
+            "safety_score": safety_score,
+            "risk_level": risk_level,
+            "bottlenecks": bottlenecks,
+            "predictions": predictions,
+            "action_recommendations": action_recommendations,
+            "advisories": advisories[:8],
+            "mode": "emulated",
+            "timestamp": time.strftime("%H:%M:%S")
+        }
+        
+        await self.update_visual_hud("STANDBY", "Local safety prediction emulation completed.")
+        state_store.add_log("[GeminiAgent] ⚙️ Emulated Cognitive Audit completed successfully.", "success")
+        return prediction
+
 # Instantiate Python Agent Mesh Instances
 gate_agent_instance = GateAgent()
 routing_agent_instance = RoutingAgent()
 safety_agent_instance = SafetyAgent()
+gemini_agent_instance = GeminiAgent()
 
 # Helper to send telemetry states
 async def broadcast_telemetry():
@@ -462,12 +733,56 @@ async def broadcast_telemetry():
         "state": state_store.get_serialized_state()
     })
 
+# Background task runner for Gemini safety predictor
+async def run_gemini_update():
+    try:
+        prediction = await gemini_agent_instance.analyze_stadium()
+        state_store.gemini_prediction = prediction
+        
+        # Publish event to Python event bus
+        await event_bus.publish("GEMINI_ANALYSIS_COMPLETED", prediction)
+        
+        # Auto-pilot integrations
+        if state_store.autopilot:
+            for rec in prediction.get("action_recommendations", []):
+                agent = rec.get("agent")
+                tool = rec.get("tool")
+                args = rec.get("args")
+                
+                if agent == "routing-agent":
+                    if tool == "update_digital_signage" and args:
+                        if args != state_store.gemini_prediction.get("last_autopilot_signage"):
+                            state_store.gemini_prediction["last_autopilot_signage"] = args
+                            state_store.add_log(f"[AI Autopilot] Executing recommendation: routing_agent.update_digital_signage()", "info")
+                            await routing_agent_instance.update_digital_signage("ALL", args)
+                    elif tool == "push_app_notification" and args:
+                        sector = "B" if "B" in args else ("C" if "C" in args else ("A" if "A" in args else "ALL"))
+                        state_store.add_log(f"[AI Autopilot] Executing recommendation: routing_agent.push_app_notification()", "info")
+                        await routing_agent_instance.push_app_notification(sector, f"AI Directives: {args}")
+                elif agent == "safety-agent":
+                    if tool == "dispatch_nearest_volunteers" and args:
+                        squad = "sec" if "Alpha" in args or "sec" in args or "Squad" in args else ("med" if "med" in args or "Responder" in args or "distress" in args else "vol")
+                        r = state_store.responders[squad]
+                        if not r["active"] and r["timer"] == 0:
+                            state_store.add_log(f"[AI Autopilot] Executing recommendation: safety_agent.dispatch_nearest_volunteers() for {r['name']}", "info")
+                            target = {"x": 395, "y": 315, "label": "Gate 5 (Incident Cordon)"}
+                            if squad == "med":
+                                target = {"x": 250, "y": 130, "label": "Stand A (Cardiac patient)"}
+                            elif squad == "vol":
+                                target = {"x": 350, "y": 210, "label": "Stand B Shelter"}
+                            safety_agent_instance.dispatch_nearest_volunteers(squad, target)
+        
+        await broadcast_telemetry()
+    except Exception as ex:
+        print(f"Error running Gemini update background task: {ex}")
+
 # ==========================================
 # 5. ASYNC BACKGROUND SIMULATION TICK LOOP
 # ==========================================
 async def simulation_tick_loop():
     await asyncio.sleep(2.0)
     print("FastAPI background simulation tick loop started.")
+    tick_count = 0
     while True:
         try:
             # 1. Fluctuations under normal parameters
@@ -507,6 +822,12 @@ async def simulation_tick_loop():
             # 4. Broadcast state updates to WebSockets
             await broadcast_telemetry()
 
+            # 5. Periodically run Gemini update (every 12 ticks / ~18 seconds)
+            tick_count += 1
+            if tick_count >= 12:
+                tick_count = 0
+                asyncio.create_task(run_gemini_update())
+
         except Exception as ex:
             print(f"Error in backend simulation tick: {ex}")
             
@@ -517,6 +838,8 @@ async def simulation_tick_loop():
 async def startup_event():
     asyncio.create_task(simulation_tick_loop())
     state_store.add_log("FastAPI backend online. Stadium Agent Mesh live.", "success")
+    # Run initial analysis
+    asyncio.create_task(run_gemini_update())
 
 # ==========================================
 # 6. REST API CONTROLLERS
@@ -526,6 +849,9 @@ class IncidentRequest(BaseModel):
 
 class DispatchRequest(BaseModel):
     squad_id: str
+
+class GeminiConfigRequest(BaseModel):
+    api_key: str
 
 @app.post("/api/incident")
 async def trigger_incident(req: IncidentRequest):
@@ -547,7 +873,27 @@ async def trigger_incident(req: IncidentRequest):
         await event_bus.publish("ANOMALY_MEDICAL_ALERT", {"standId": "A"})
         
     await broadcast_telemetry()
+    # Trigger immediate Gemini update task when an incident occurs
+    asyncio.create_task(run_gemini_update())
     return {"status": "success", "triggered": itype}
+
+@app.post("/api/gemini/analyze")
+async def manual_gemini_analyze():
+    await run_gemini_update()
+    return {"status": "success", "prediction": state_store.gemini_prediction}
+
+@app.post("/api/gemini/config")
+async def configure_gemini_key(req: GeminiConfigRequest):
+    key = req.api_key.strip()
+    if not key:
+        return {"status": "error", "message": "Key cannot be empty"}
+    success = gemini_agent_instance.setup_sdk(key)
+    if success:
+        state_store.add_log("[GeminiAgent] ✦ Dynamic API Key registered successfully.", "success")
+        # Trigger immediate run using new key
+        asyncio.create_task(run_gemini_update())
+        return {"status": "success"}
+    return {"status": "error", "message": "Failed to configure Gemini SDK"}
 
 @app.post("/api/dispatch")
 async def manual_dispatch(req: DispatchRequest):

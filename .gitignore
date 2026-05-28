@@ -1,0 +1,22 @@
+# Local environment files
+.env.local
+.env
+.env.*.local
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Node/React artifacts
+node_modules/
+dist/
+dist-ssr/
